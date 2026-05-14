@@ -4,7 +4,7 @@ ForgeSpace is a local browser microsite prototype for a simplified AFS-style vis
 
 ## Run Locally
 
-From this folder, start a static server:
+From this folder, start the local static server:
 
 ```powershell
 node server.js
@@ -18,9 +18,31 @@ http://localhost:3000
 
 You can also open `ForgeSpace.html` directly in a browser, but the local server is a cleaner demo path. `ForgeSpaceDemo.html` keeps the simulated floating collaborator cursors for pitch/demo use.
 
+For demo presence mode through the local server:
+
+```powershell
+node server.js --entry=ForgeSpaceDemo.html
+```
+
+Or open:
+
+```text
+http://localhost:3000/demo
+```
+
+Before handoff, run:
+
+```powershell
+node --check server.js
+node --check src/app.js
+```
+
+If npm is available, the same workflows are also exposed as `npm start`, `npm run start:demo`, and `npm run check`.
+
 ## MVP Capabilities
 
 - Simulated AFS user login and guest access
+- Required board-retention warning before template selection
 - Guided template gallery
 - PI Planning, Team Retrospective, Brainstorming, and Process Mapping templates
 - Two-row workshop ribbon
@@ -33,11 +55,12 @@ You can also open `ForgeSpace.html` directly in a browser, but the local server 
 - Movable lines, arrows, and freehand pen marks
 - Simulated multi-user cursors and participants
 - Demo AI clustering, summary, and action-item panel
-- JSON import plus JSON, PNG, PDF, and HTML export for registered users
+- JSON import for registered users plus JSON, PNG, PDF, and HTML export for registered users and guests
 
 ## Basic Use
 
 - Sign in as the simulated AFS user for full import/export controls.
+- Acknowledge the retention warning before entering the template gallery.
 - Pick a template or open a blank board.
 - Select Sticky, Shape, Text, or Comment, then click the canvas to place it. The app returns to Select after creation.
 - Select Line, Arrow, or Pen, then drag on the canvas to draw. The app returns to Select after creation.
@@ -51,4 +74,8 @@ You can also open `ForgeSpace.html` directly in a browser, but the local server 
 
 ## Notes
 
-This MVP intentionally uses demo-only authentication, simulated collaboration, and deterministic demo AI. Production deployment would replace those with enterprise identity, real-time services, approved AI infrastructure, audit logging, and Microsoft ecosystem integrations.
+This MVP intentionally uses demo-only authentication, simulated collaboration, client-side exports, and deterministic demo AI. Production deployment would replace those with the current AFS login/UAM process, real-time collaboration services, server-enforced permissions, and Microsoft ecosystem integrations. AI is currently roadmap-only for production launch.
+
+ForgeSpace boards are not intended to be permanently saved by AFS. Users must export JSON if they want to continue work later through import.
+
+See `PRODUCTION_HANDOFF.md`, `PRODUCT_REQUIREMENTS.md`, and `PRODUCTION_BACKLOG.md` for the production roadmap, requirements, MVP boundaries, and handoff checklist.

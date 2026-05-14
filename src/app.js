@@ -4,6 +4,8 @@ const appConfig = window.FORGESPACE_CONFIG || {};
 const state = {
   user: null,
   role: "guest",
+  sessionId: `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+  persistenceAcknowledged: false,
   currentTemplate: null,
   boardTitle: "Untitled ForgeSpace Board",
   objects: [],
@@ -198,17 +200,18 @@ function bindAccess() {
     const email = document.getElementById("email").value || "AFS User";
     state.user = email.split("@")[0].replace(".", " ");
     state.role = "registered";
+    state.persistenceAcknowledged = false;
     render();
   });
   document.getElementById("guestBtn").addEventListener("click", () => {
     state.user = "Guest Participant";
     state.role = "guest";
+    state.persistenceAcknowledged = false;
     render();
   });
 }
 
 function galleryView() {
-  const hasSaved = Boolean(localStorage.getItem(STORE_KEY));
   return `
     <main class="view gallery-view">
       <header class="app-topbar">
@@ -224,16 +227,30 @@ function galleryView() {
           <div>
             <p class="eyebrow">Choose a workshop</p>
             <h1>Start with the structure your team needs.</h1>
-            <p class="supporting">Choose a template, resume your saved board, or open a blank canvas and start working.</p>
+            <p class="supporting">Choose a template or open a blank canvas. ForgeSpace does not retain boards after a session; export JSON when you need to preserve the work.</p>
           </div>
           <div class="top-actions">
-            <button class="secondary" id="resumeBoard" ${hasSaved ? "" : "disabled"} style="width:auto;padding:12px 16px;">Resume Saved</button>
             <button class="secondary" id="blankBoard" style="width:auto;padding:12px 16px;">Blank Board</button>
           </div>
         </div>
         <div class="template-grid">${templates.map(templateCard).join("")}</div>
       </section>
+      ${state.persistenceAcknowledged ? "" : persistenceModal()}
     </main>`;
+}
+
+function persistenceModal() {
+  return `
+    <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="persistenceTitle">
+      <div class="modal">
+        <p class="eyebrow">Board Retention Notice</p>
+        <h2 id="persistenceTitle">ForgeSpace does not permanently save boards.</h2>
+        <p class="supporting">Created boards are not retained by AFS after the session. To keep a board, export it as JSON, PNG, PDF, or HTML before leaving. JSON is the only format that can be imported later to continue work.</p>
+        <div class="modal-actions">
+          <button class="primary" id="ackPersistence">Yes, I understand</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 function templateCard(tpl) {
@@ -273,24 +290,26 @@ function previewMarkup(id) {
 }
 
 function bindGallery() {
+  document.getElementById("ackPersistence")?.addEventListener("click", () => {
+    state.persistenceAcknowledged = true;
+    render();
+  });
   document.querySelectorAll("[data-template]").forEach(btn => {
     btn.addEventListener("click", () => {
+      if (!state.persistenceAcknowledged) return;
       cloneTemplate(templates.find(tpl => tpl.id === btn.dataset.template));
       render();
     });
   });
   document.getElementById("blankBoard").addEventListener("click", createBlankBoard);
-  document.getElementById("resumeBoard").addEventListener("click", () => {
-    if (loadLocalBoard()) render();
-  });
   document.getElementById("signOut").addEventListener("click", signOut);
 }
 
 function cloneTemplate(template) {
   state.currentTemplate = template.id;
   state.boardTitle = `${template.title} Workspace`;
-  state.objects = template.objects.map(obj => ({ ...obj, id: uid() }));
-  state.connectors = template.connectors.map(conn => ({ kind: "arrow", ...conn, id: uid() }));
+  state.objects = template.objects.map(obj => ({ ...obj, id: uid(), ownerId: "template" }));
+  state.connectors = template.connectors.map(conn => ({ kind: "arrow", ...conn, id: uid(), ownerId: "template" }));
   state.drawings = [];
   state.selectedId = null;
   state.selectedType = "object";
@@ -300,12 +319,13 @@ function cloneTemplate(template) {
 }
 
 function createBlankBoard() {
+  if (!state.persistenceAcknowledged) return;
   state.currentTemplate = "blank";
   state.boardTitle = "Blank ForgeSpace Board";
   state.objects = [
     shape("Workshop Goal", 260, 180, 340, 92, "purple"),
     sticky("Click a tool, then click or drag on the canvas.", 280, 340, "yellow")
-  ].map(obj => ({ ...obj, id: uid() }));
+  ].map(obj => ({ ...obj, id: uid(), ownerId: state.sessionId }));
   state.connectors = [];
   state.drawings = [];
   state.selectedId = null;
@@ -374,10 +394,10 @@ function workspaceView() {
           <div class="tool-group">
             <button class="tool-btn" id="newBoard" ${registered ? "" : "disabled"} title="Create a blank board">New</button>
             <button class="tool-btn" id="loadJson" ${registered ? "" : "disabled"} title="Import board from JSON">Import</button>
-            <button class="tool-btn" id="saveJson" ${registered ? "" : "disabled"} title="Download board JSON">JSON</button>
-            <button class="tool-btn" id="exportPng" ${registered ? "" : "disabled"} title="Export PNG">PNG</button>
-            <button class="tool-btn" id="exportPdf" ${registered ? "" : "disabled"} title="Export PDF">PDF</button>
-            <button class="tool-btn" id="exportHtml" ${registered ? "" : "disabled"} title="Export HTML">HTML</button>
+            <button class="tool-btn" id="saveJson" title="Download board JSON">JSON</button>
+            <button class="tool-btn" id="exportPng" title="Export PNG">PNG</button>
+            <button class="tool-btn" id="exportPdf" title="Export PDF">PDF</button>
+            <button class="tool-btn" id="exportHtml" title="Export HTML">HTML</button>
           </div>
           <div class="tool-group">
             <button class="tool-btn" id="duplicateObj" ${state.selectedId && state.selectedType === "object" ? "" : "disabled"} title="Duplicate selected object">Duplicate</button>
@@ -614,7 +634,8 @@ function startConnectorDraw(stage, event, point, kind, startObjectId) {
     y2: point.y,
     fromId: startObjectId || null,
     fromPort: null,
-    toId: null
+    toId: null,
+    ownerId: state.sessionId
   };
   if (startObjectId) {
     const startObject = state.objects.find(obj => obj.id === startObjectId);
@@ -652,7 +673,7 @@ function startConnectorDraw(stage, event, point, kind, startObjectId) {
 
 function startFreehandDraw(stage, event, point) {
   clearSelection();
-  const drawing = { id: uid(), points: [point], color: "#111111", width: 3 };
+  const drawing = { id: uid(), points: [point], color: "#111111", width: 3, ownerId: state.sessionId };
   state.drawings.push(drawing);
   selectItem("drawing", drawing.id, false);
   try { stage.setPointerCapture(event.pointerId); } catch {}
@@ -702,6 +723,7 @@ function addObject(obj, atCenter = true, keepMode = false) {
     obj.y = center.y - (obj.h || 100) / 2;
   }
   obj.id = uid();
+  obj.ownerId = state.sessionId;
   state.objects.push(obj);
   selectItem("object", obj.id, false);
   if (!keepMode) state.mode = "select";
@@ -772,13 +794,25 @@ function bindConnectorLayer(layer) {
         return;
       }
       if (!isItemSelected("connector", el.dataset.id)) selectItem("connector", el.dataset.id, false);
-      if (state.mode === "select") startConnectorMove(el.dataset.id, event);
+      if (state.mode === "select") {
+        if (!canModifyItem(state.connectors.find(item => item.id === el.dataset.id))) {
+          toast("Guests can only edit items they created.");
+          render();
+          return;
+        }
+        startConnectorMove(el.dataset.id, event);
+      }
       else render();
     });
   });
   layer.querySelectorAll(".connector-end").forEach(el => {
     el.addEventListener("pointerdown", event => {
       event.stopPropagation();
+      if (!canModifyItem(state.connectors.find(item => item.id === el.dataset.id))) {
+        toast("Guests can only edit items they created.");
+        render();
+        return;
+      }
       startConnectorEndpointMove(el.dataset.id, el.dataset.end, event);
     });
   });
@@ -790,7 +824,14 @@ function bindConnectorLayer(layer) {
         return;
       }
       if (!isItemSelected("drawing", el.dataset.id)) selectItem("drawing", el.dataset.id, false);
-      if (state.mode === "select") startDrawingMove(el.dataset.id, event);
+      if (state.mode === "select") {
+        if (!canModifyItem(state.drawings.find(item => item.id === el.dataset.id))) {
+          toast("Guests can only edit items they created.");
+          render();
+          return;
+        }
+        startDrawingMove(el.dataset.id, event);
+      }
       else render();
     });
   });
@@ -924,10 +965,24 @@ function bindObject(el) {
     }
     if (!isObjectSelected(id)) selectObject(id, false);
     if (state.voting && ["sticky", "shape"].includes(obj.type)) {
+      if (!canModifyItem(obj)) {
+        toast("Guests can only vote on items they created in this MVP.");
+        render();
+        return;
+      }
       obj.votes = (obj.votes || 0) + 1;
       saveLocalBoard(false);
       toast("Vote added.");
       render();
+      return;
+    }
+    if (!canModifyItem(obj)) {
+      toast("Guests can only edit items they created.");
+      document.querySelectorAll(".board-object.selected").forEach(node => node.classList.remove("selected"));
+      el.classList.add("selected");
+      renderPanel();
+      clearTimeout(window.objectSelectTimer);
+      window.objectSelectTimer = setTimeout(() => render(), 240);
       return;
     }
     if (event.target.classList.contains("resize-handle")) {
@@ -953,6 +1008,10 @@ function bindObject(el) {
   el.addEventListener("dblclick", event => {
     event.stopPropagation();
     clearTimeout(window.objectSelectTimer);
+    if (!canModifyItem(state.objects.find(item => item.id === id))) {
+      toast("Guests can only edit items they created.");
+      return;
+    }
     openEditor(id, event.clientX, event.clientY);
   });
 }
@@ -1115,6 +1174,10 @@ function startConnectorEndpointMove(id, end, event) {
 function openEditor(id, clientX, clientY) {
   const obj = state.objects.find(item => item.id === id);
   if (!obj) return;
+  if (!canModifyItem(obj)) {
+    toast("Guests can only edit items they created.");
+    return;
+  }
   document.querySelector(".context-editor")?.remove();
   const editor = document.createElement("div");
   editor.className = "context-editor";
@@ -1170,7 +1233,7 @@ function renderPanel() {
     panel.innerHTML = `
       <div class="panel-card">
         <h3>Export Options</h3>
-        <p>Registered users can import a board from JSON or export the current board as JSON, PNG, PDF, or HTML.</p>
+        <p>AFS users can import a board from JSON. AFS users and guests can export the current board as JSON, PNG, PDF, or HTML.</p>
         <div class="stat-row"><span>Import</span><span class="badge">JSON board</span></div>
         <div class="stat-row"><span>JSON</span><span class="badge">Board data</span></div>
         <div class="stat-row"><span>PNG</span><span class="badge">Image snapshot</span></div>
@@ -1308,6 +1371,12 @@ function findItem(type, id) {
   return null;
 }
 
+function canModifyItem(item) {
+  if (!item) return false;
+  if (state.role === "registered") return true;
+  return item.ownerId === state.sessionId;
+}
+
 function dragObjectGroup(obj) {
   const selected = selectedItemRecords();
   if (selected.length > 1 && isItemSelected("object", obj.id)) {
@@ -1402,7 +1471,11 @@ function duplicateSelected() {
   if (state.selectedType !== "object" || !state.selectedId) return;
   const obj = state.objects.find(item => item.id === state.selectedId);
   if (!obj) return;
-  const copy = { ...obj, id: uid(), x: obj.x + 28, y: obj.y + 28, text: obj.text };
+  if (!canModifyItem(obj)) {
+    toast("Guests can only duplicate items they created.");
+    return;
+  }
+  const copy = { ...obj, id: uid(), x: obj.x + 28, y: obj.y + 28, text: obj.text, ownerId: state.sessionId };
   state.objects.push(copy);
   selectObject(copy.id, false);
   saveLocalBoard(false);
@@ -1412,6 +1485,10 @@ function duplicateSelected() {
 function copySelected(cut = false) {
   const item = selectedItem();
   if (!item) return;
+  if (!canModifyItem(item)) {
+    toast("Guests can only copy items they created.");
+    return;
+  }
   state.clipboard = {
     type: state.selectedType,
     item: JSON.parse(JSON.stringify(item))
@@ -1424,6 +1501,7 @@ function pasteClipboard() {
   if (!state.clipboard) return;
   const item = JSON.parse(JSON.stringify(state.clipboard.item));
   item.id = uid();
+  item.ownerId = state.sessionId;
   if (state.clipboard.type === "object") {
     item.x += 32;
     item.y += 32;
@@ -1463,6 +1541,11 @@ function groupSelected() {
         .map(item => ({ type: "object", id: item.id, item }))
       : group;
   }
+  group = group.filter(record => canModifyItem(record.item));
+  if (!group.length) {
+    toast("Guests can only group items they created.");
+    return;
+  }
   group.forEach(record => { record.item.groupId = groupId; });
   state.selectedItems = group.map(record => itemKey(record.type, record.id));
   state.selectedIds = selectedObjectIds();
@@ -1477,7 +1560,11 @@ function groupSelected() {
 function ungroupSelected() {
   const item = selectedItem();
   if (!item?.groupId) return;
-  allBoardItemRecords().filter(record => record.item.groupId === item.groupId).forEach(record => delete record.item.groupId);
+  if (!canModifyItem(item)) {
+    toast("Guests can only edit items they created.");
+    return;
+  }
+  allBoardItemRecords().filter(record => record.item.groupId === item.groupId && canModifyItem(record.item)).forEach(record => delete record.item.groupId);
   saveLocalBoard(false);
   toast("Ungrouped.");
   render();
@@ -1485,7 +1572,11 @@ function ungroupSelected() {
 
 function toggleLockSelected() {
   if (selectedItems().length > 1) {
-    const records = selectedItemRecords();
+    const records = selectedItemRecords().filter(record => canModifyItem(record.item));
+    if (!records.length) {
+      toast("Guests can only edit items they created.");
+      return;
+    }
     const shouldLock = records.some(record => !record.item.locked);
     records.forEach(record => { record.item.locked = shouldLock; });
     saveLocalBoard(false);
@@ -1495,6 +1586,10 @@ function toggleLockSelected() {
   }
   const item = selectedItem();
   if (!item) return;
+  if (!canModifyItem(item)) {
+    toast("Guests can only edit items they created.");
+    return;
+  }
   item.locked = !item.locked;
   saveLocalBoard(false);
   toast(item.locked ? "Locked in place." : "Unlocked.");
@@ -1503,14 +1598,14 @@ function toggleLockSelected() {
 
 function moveSelectedLayer(action) {
   if (!state.selectedId) return;
-  reorderItems(state.objects, new Set(selectedItems().filter(item => item.type === "object").map(item => item.id)), action);
+  reorderItems(state.objects, new Set(selectedItems().filter(item => item.type === "object" && canModifyItem(findItem(item.type, item.id))).map(item => item.id)), action);
   moveSelectedSvgItems(action);
   saveLocalBoard(false);
   render();
 }
 
 function moveSelectedSvgItems(action) {
-  const records = selectedItemRecords().filter(record => record.type === "connector" || record.type === "drawing");
+  const records = selectedItemRecords().filter(record => (record.type === "connector" || record.type === "drawing") && canModifyItem(record.item));
   if (!records.length) return;
   if (action === "front") {
     let z = maxSvgZ("over") + 1;
@@ -1602,9 +1697,15 @@ function reorderItems(list, ids, action) {
 function deleteSelected() {
   if (!state.selectedId) return;
   const selected = selectedItems();
-  const objectIds = new Set(selected.filter(item => item.type === "object").map(item => item.id));
-  const connectorIds = new Set(selected.filter(item => item.type === "connector").map(item => item.id));
-  const drawingIds = new Set(selected.filter(item => item.type === "drawing").map(item => item.id));
+  const allowed = selected.filter(item => canModifyItem(findItem(item.type, item.id)));
+  if (!allowed.length) {
+    toast("Guests can only delete items they created.");
+    return;
+  }
+  if (allowed.length < selected.length) toast("Only items you created were deleted.");
+  const objectIds = new Set(allowed.filter(item => item.type === "object").map(item => item.id));
+  const connectorIds = new Set(allowed.filter(item => item.type === "connector").map(item => item.id));
+  const drawingIds = new Set(allowed.filter(item => item.type === "drawing").map(item => item.id));
   state.objects = state.objects.filter(obj => !objectIds.has(obj.id));
   state.connectors = state.connectors.filter(conn => !connectorIds.has(conn.id));
   state.drawings = state.drawings.filter(drawing => !drawingIds.has(drawing.id));
@@ -1732,9 +1833,8 @@ function boardData() {
 }
 
 function saveLocalBoard(showToast) {
-  localStorage.setItem(STORE_KEY, JSON.stringify(boardData()));
   recordHistory();
-  if (showToast) toast("Board saved in this browser.");
+  if (showToast) toast("ForgeSpace does not permanently save boards. Export JSON to keep this board.");
 }
 
 function historyData() {
@@ -1767,21 +1867,12 @@ function undo() {
   state.isRestoring = true;
   applyBoardData(JSON.parse(state.history[state.historyIndex]));
   state.isRestoring = false;
-  localStorage.setItem(STORE_KEY, JSON.stringify(boardData()));
   render();
 }
 
 function loadLocalBoard() {
-  const raw = localStorage.getItem(STORE_KEY);
-  if (!raw) return false;
-  try {
-    applyBoardData(JSON.parse(raw));
-    toast("Saved board restored.");
-    return true;
-  } catch {
-    toast("Saved board could not be restored.");
-    return false;
-  }
+  toast("Boards are not reopened automatically. Import JSON to continue prior work.");
+  return false;
 }
 
 function applyBoardData(data) {
