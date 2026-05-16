@@ -20,12 +20,20 @@ const state = {
   lineVariant: "line",
   arrowVariant: "right",
   clipboard: null,
+  customBlocks: [],
+  layerQuery: "",
+  reviewMode: false,
+  snapToGrid: true,
+  voteMode: null,
+  sectionExportRect: null,
+  sectionExportItems: [],
+  showSectionConfirm: false,
   history: [],
   historyIndex: -1,
   isRestoring: false,
   pan: { x: -120, y: -80 },
   zoom: 0.78,
-  panel: "session",
+  panel: "inspect",
   timer: { remaining: 15 * 60, running: false, id: null },
   voting: false,
   cursors: [
@@ -47,6 +55,36 @@ const state = {
 };
 
 const templates = [
+  {
+    id: "blank-space",
+    title: "Blank Space",
+    description: "Open an empty canvas for freeform working sessions, sketches, and structured discovery.",
+    objects: [],
+    connectors: []
+  },
+  {
+    id: "solution-architect",
+    title: "Solution Architect",
+    description: "Map business capability, system boundaries, integrations, decisions, and delivery risks.",
+    objects: [
+      frame("Solution Context", 160, 130, 680, 460),
+      frame("Delivery Readiness", 900, 130, 680, 460),
+      shape("Business Capability", 230, 230, 240, 90, "purple"),
+      shape("User Journey", 540, 230, 220, 90, "blue"),
+      shape("Core Platform", 230, 390, 240, 90, "gray"),
+      shape("External Service", 540, 390, 220, 90, "green"),
+      sticky("Open architecture decision", 980, 240, "yellow"),
+      sticky("Security review dependency", 1205, 240, "pink"),
+      sticky("Data ownership question", 980, 405, "blue"),
+      comment("Use Review mode before stakeholder walkthrough.", 1210, 410)
+    ],
+    connectors: [
+      connector(470, 275, 540, 275),
+      connector(470, 435, 540, 435),
+      connector(760, 275, 980, 285),
+      connector(760, 435, 980, 445)
+    ]
+  },
   {
     id: "pi",
     title: "PI Planning",
@@ -83,24 +121,6 @@ const templates = [
     connectors: [connector(1230, 292, 1500, 292)]
   },
   {
-    id: "brainstorm",
-    title: "Brainstorming",
-    description: "Capture ideas quickly, cluster themes, vote, and move the strongest ideas into next steps.",
-    objects: [
-      shape("Challenge Statement", 210, 155, 430, 90, "purple"),
-      sticky("Reduce meeting prep friction", 230, 320, "yellow"),
-      sticky("One-click workshop setup", 430, 360, "green"),
-      sticky("Reusable client-ready templates", 690, 300, "blue"),
-      sticky("AI theme detection", 890, 420, "pink"),
-      lane("Theme Cluster A", 210, 570, 430, 260),
-      lane("Theme Cluster B", 710, 570, 430, 260),
-      lane("Top Concepts", 1210, 240, 430, 590),
-      sticky("Launch as internal pilot", 1260, 340, "green"),
-      comment("AI Assist can simulate grouping and summary for the pitch.", 1260, 515)
-    ],
-    connectors: [connector(970, 462, 1260, 382)]
-  },
-  {
     id: "process",
     title: "Process Mapping",
     description: "Map current or future-state workflows using steps, decisions, handoffs, and risks.",
@@ -123,11 +143,33 @@ const templates = [
       connector(890, 300, 1040, 300),
       connector(1210, 300, 1320, 300)
     ]
+  },
+  {
+    id: "brainstorm",
+    title: "Brainstorming",
+    description: "Capture ideas quickly, cluster themes, vote, and move the strongest ideas into next steps.",
+    objects: [
+      shape("Challenge Statement", 210, 155, 430, 90, "purple"),
+      sticky("Reduce meeting prep friction", 230, 320, "yellow"),
+      sticky("One-click workshop setup", 430, 360, "green"),
+      sticky("Reusable client-ready templates", 690, 300, "blue"),
+      sticky("AI theme detection", 890, 420, "pink"),
+      lane("Theme Cluster A", 210, 570, 430, 260),
+      lane("Theme Cluster B", 710, 570, 430, 260),
+      lane("Top Concepts", 1210, 240, 430, 590),
+      sticky("Launch as internal pilot", 1260, 340, "green"),
+      comment("AI Assist can simulate grouping and summary for the pitch.", 1260, 515)
+    ],
+    connectors: [connector(970, 462, 1260, 382)]
   }
 ];
 
 function lane(text, x, y, w, h) {
   return { type: "lane", text, x, y, w, h, color: "white" };
+}
+
+function frame(text, x, y, w = 520, h = 340) {
+  return { type: "frame", text, x, y, w, h, color: "white", status: "draft", owner: "", notes: "" };
 }
 
 function sticky(text, x, y, color = "yellow") {
@@ -230,7 +272,7 @@ function galleryView() {
             <p class="supporting">Choose a template or open a blank canvas. ForgeSpace does not retain boards after a session; export JSON when you need to preserve the work.</p>
           </div>
           <div class="top-actions">
-            <button class="secondary" id="blankBoard" style="width:auto;padding:12px 16px;">Blank Board</button>
+            <button class="secondary" id="blankBoard" style="width:auto;padding:12px 16px;">Blank Space</button>
           </div>
         </div>
         <div class="template-grid">${templates.map(templateCard).join("")}</div>
@@ -266,6 +308,17 @@ function templateCard(tpl) {
 }
 
 function previewMarkup(id) {
+  if (id === "blank-space") {
+    return `<span class="mini-empty-label">Blank Space</span>`;
+  }
+  if (id === "solution-architect") {
+    return `
+      <span class="mini-frame" style="left:18px;top:20px;width:132px;height:88px;"></span>
+      <span class="mini-frame" style="left:178px;top:20px;width:132px;height:88px;"></span>
+      <span class="mini-flow" style="left:42px;top:48px;width:48px;height:26px;"></span>
+      <span class="mini-flow" style="left:202px;top:48px;width:48px;height:26px;background:#dff5e8;"></span>
+      <span class="mini-note" style="left:258px;top:68px;background:#ffe1f2;"></span>`;
+  }
   if (id === "process") {
     return `
       <span class="mini-flow" style="left:20px;top:48px;width:54px;height:30px;"></span>
@@ -307,7 +360,7 @@ function bindGallery() {
 
 function cloneTemplate(template) {
   state.currentTemplate = template.id;
-  state.boardTitle = `${template.title} Workspace`;
+  state.boardTitle = template.id === "blank-space" ? "Blank ForgeSpace Space" : `${template.title} Workspace`;
   state.objects = template.objects.map(obj => ({ ...obj, id: uid(), ownerId: "template" }));
   state.connectors = template.connectors.map(conn => ({ kind: "arrow", ...conn, id: uid(), ownerId: "template" }));
   state.drawings = [];
@@ -321,8 +374,9 @@ function cloneTemplate(template) {
 function createBlankBoard() {
   if (!state.persistenceAcknowledged) return;
   state.currentTemplate = "blank";
-  state.boardTitle = "Blank ForgeSpace Board";
+  state.boardTitle = "Blank ForgeSpace Space";
   state.objects = [
+    frame("Discovery Frame", 220, 130, 760, 470),
     shape("Workshop Goal", 260, 180, 340, 92, "purple"),
     sticky("Click a tool, then click or drag on the canvas.", 280, 340, "yellow")
   ].map(obj => ({ ...obj, id: uid(), ownerId: state.sessionId }));
@@ -354,6 +408,7 @@ function workspaceView() {
             </select>
             <button class="tool-btn ${state.mode === "text" ? "active" : ""}" data-create="text" title="Click the canvas to place text">Text</button>
             <button class="tool-btn ${state.mode === "comment" ? "active" : ""}" data-create="comment" title="Click the canvas to place a comment">Comment</button>
+            <button class="tool-btn ${state.mode === "frame" ? "active" : ""}" data-create="frame" title="Click the canvas to place a frame">Frame</button>
             <button class="tool-btn ${state.mode === "line" ? "active" : ""}" data-mode="line" title="Drag on the canvas to draw a line">Line</button>
             <select class="select-control compact-select" id="lineSelect" title="Line type">
               ${lineOptions().map(opt => `<option value="${opt.value}" ${state.lineVariant === opt.value ? "selected" : ""}>${opt.label}</option>`).join("")}
@@ -377,7 +432,9 @@ function workspaceView() {
             <button class="tool-btn" id="fitBoard" title="Fit board">Fit</button>
           </div>
           <div class="tool-group">
-            <button class="tool-btn ${state.voting ? "active" : ""}" id="voteBtn" title="Start or stop voting">Vote</button>
+            <button class="icon-btn vote-icon ${state.voteMode === "up" ? "active" : ""}" id="voteUpBtn" title="Thumbs up vote (Ctrl+Y)" aria-label="Thumbs up vote">&#128077;</button>
+            <button class="icon-btn vote-icon ${state.voteMode === "down" ? "active" : ""}" id="voteDownBtn" title="Thumbs down vote (Ctrl+D)" aria-label="Thumbs down vote">&#128078;</button>
+            <button class="tool-btn ${state.reviewMode ? "active" : ""}" id="reviewModeBtn" title="Switch between edit and review view">Review</button>
             <button class="tool-btn" id="timerBtn" title="Start or pause timer">Timer ${formatTimer(state.timer.remaining)}</button>
             <select class="select-control" id="timerSelect" title="Timer duration">
               <option value="300">5 min</option>
@@ -394,15 +451,33 @@ function workspaceView() {
           <div class="tool-group">
             <button class="tool-btn" id="newBoard" ${registered ? "" : "disabled"} title="Create a blank board">New</button>
             <button class="tool-btn" id="loadJson" ${registered ? "" : "disabled"} title="Import board from JSON">Import</button>
-            <button class="tool-btn" id="saveJson" title="Download board JSON">JSON</button>
-            <button class="tool-btn" id="exportPng" title="Export PNG">PNG</button>
-            <button class="tool-btn" id="exportPdf" title="Export PDF">PDF</button>
-            <button class="tool-btn" id="exportHtml" title="Export HTML">HTML</button>
+            <details class="export-menu">
+              <summary class="tool-btn">Export</summary>
+              <div class="export-options">
+                <button id="saveJson" type="button">JSON</button>
+                <button id="exportPng" type="button">PNG</button>
+                <button id="exportPdf" type="button">PDF</button>
+                <button id="exportHtml" type="button">HTML</button>
+                <button id="exportWord" type="button">WORD</button>
+                <button id="exportSection" type="button">SECTION</button>
+              </div>
+            </details>
           </div>
           <div class="tool-group">
-            <button class="tool-btn" id="duplicateObj" ${state.selectedId && state.selectedType === "object" ? "" : "disabled"} title="Duplicate selected object">Duplicate</button>
-            <select class="select-control layer-select" id="layerSelect" ${state.selectedId ? "" : "disabled"} title="Layer selected item">
-              <option value="">Layer</option>
+            <select class="select-control layer-select" id="arrangeSelect" ${state.selectedId ? "" : "disabled"} title="Arrange selected items">
+              <option value="">Arrange</option>
+              <option value="duplicate">Duplicate</option>
+              <option value="group">Group</option>
+              <option value="ungroup">Ungroup</option>
+              <option value="lock">Lock / Unlock</option>
+              <option value="align-left">Align Left</option>
+              <option value="align-center">Align Center</option>
+              <option value="align-right">Align Right</option>
+              <option value="align-top">Align Top</option>
+              <option value="align-middle">Align Middle</option>
+              <option value="align-bottom">Align Bottom</option>
+              <option value="distribute-x">Distribute X</option>
+              <option value="distribute-y">Distribute Y</option>
               <option value="front">Bring to Front</option>
               <option value="forward">Forward</option>
               <option value="backward">Backward</option>
@@ -423,15 +498,19 @@ function workspaceView() {
         </div>
         <aside class="side-panel">
           <div class="panel-tabs">
+            <button data-panel="inspect" class="${state.panel === "inspect" ? "active" : ""}">Inspect</button>
+            <button data-panel="layers" class="${state.panel === "layers" ? "active" : ""}">Layers</button>
+            <button data-panel="library" class="${state.panel === "library" ? "active" : ""}">Library</button>
             <button data-panel="session" class="${state.panel === "session" ? "active" : ""}">Session</button>
+            <button data-panel="hotkeys" class="${state.panel === "hotkeys" ? "active" : ""}">HotKeys</button>
             <button data-panel="ai" class="${state.panel === "ai" ? "active" : ""}">AI Assist</button>
-            <button data-panel="export" class="${state.panel === "export" ? "active" : ""}">Export</button>
           </div>
           <div class="panel-content" id="panelContent"></div>
         </aside>
       </section>
     </main>
     <div class="toast" id="toast"></div>
+    ${sectionExportModal()}
     <input id="fileInput" type="file" accept="application/json" hidden />`;
 }
 
@@ -480,9 +559,12 @@ function bindWorkspace() {
     state.zoom = 0.78;
     render();
   });
-  document.getElementById("voteBtn").addEventListener("click", () => {
-    state.voting = !state.voting;
-    toast(state.voting ? "Voting is open. Click notes or shapes to vote." : "Voting closed.");
+  document.getElementById("voteUpBtn").addEventListener("click", () => setVoteMode("up"));
+  document.getElementById("voteDownBtn").addEventListener("click", () => setVoteMode("down"));
+  document.getElementById("reviewModeBtn").addEventListener("click", () => {
+    state.reviewMode = !state.reviewMode;
+    state.mode = "select";
+    toast(state.reviewMode ? "Review mode is on." : "Edit mode is on.");
     render();
   });
   document.getElementById("timerBtn").addEventListener("click", toggleTimer);
@@ -504,10 +586,9 @@ function bindWorkspace() {
   });
   document.getElementById("focusBtn").addEventListener("click", () => toast("Participants have been brought to the facilitator view."));
   document.getElementById("newBoard").addEventListener("click", createBlankBoard);
-  document.getElementById("duplicateObj").addEventListener("click", duplicateSelected);
-  document.getElementById("layerSelect").addEventListener("change", event => {
+  document.getElementById("arrangeSelect").addEventListener("change", event => {
     if (!event.target.value) return;
-    moveSelectedLayer(event.target.value);
+    handleArrangeAction(event.target.value);
     event.target.value = "";
   });
   document.getElementById("deleteObj").addEventListener("click", deleteSelected);
@@ -517,6 +598,22 @@ function bindWorkspace() {
   document.getElementById("exportPng").addEventListener("click", exportPng);
   document.getElementById("exportPdf").addEventListener("click", exportPdf);
   document.getElementById("exportHtml").addEventListener("click", exportHtml);
+  document.getElementById("exportWord").addEventListener("click", () => exportWord());
+  document.getElementById("exportSection").addEventListener("click", beginSectionExport);
+  document.getElementById("confirmSectionExport")?.addEventListener("click", () => {
+    exportWord(state.sectionExportItems, "section");
+    state.showSectionConfirm = false;
+    state.mode = "select";
+    state.sectionExportRect = null;
+    render();
+  });
+  document.getElementById("redoSectionExport")?.addEventListener("click", () => {
+    state.showSectionConfirm = false;
+    state.mode = "export-section";
+    state.sectionExportRect = null;
+    toast("Draw a new section rectangle.");
+    render();
+  });
   document.querySelectorAll("[data-panel]").forEach(btn => {
     btn.addEventListener("click", () => {
       state.panel = btn.dataset.panel;
@@ -535,8 +632,16 @@ function bindWorkspace() {
 
 function setMode(mode) {
   state.mode = mode;
+  if (mode !== "export-section") state.sectionExportRect = null;
   state.draftLine = null;
   state.draftDrawing = null;
+  render();
+}
+
+function setVoteMode(mode) {
+  state.voteMode = state.voteMode === mode ? null : mode;
+  state.voting = Boolean(state.voteMode);
+  toast(state.voteMode === "up" ? "Thumbs up vote active. Click an item to vote." : state.voteMode === "down" ? "Thumbs down vote active. Click an item to vote." : "Voting closed.");
   render();
 }
 
@@ -574,9 +679,17 @@ function arrowOptions() {
 
 function bindCanvas(stage) {
   stage.addEventListener("pointerdown", event => {
-    if (event.target.closest(".board-object") || event.target.closest(".connector-hit") || event.target.closest(".drawing-hit") || event.target.closest(".connector-end")) return;
+    if (event.target.closest(".board-object") || event.target.closest(".connector-hit") || event.target.closest(".drawing-hit") || event.target.closest(".connector-end") || event.target.closest(".drawing-end")) return;
     const point = eventPoint(event, stage);
-    if (["sticky", "shape", "text", "comment"].includes(state.mode)) {
+    if (state.mode === "export-section") {
+      startSectionExportDraw(stage, event, point);
+      return;
+    }
+    if (state.reviewMode) {
+      startPanning(stage, event);
+      return;
+    }
+    if (["sticky", "shape", "text", "comment", "frame"].includes(state.mode)) {
       const obj = createObjectForMode(state.mode, point.x, point.y);
       addObject(obj, false, false);
       openEditor(obj.id, event.clientX, event.clientY);
@@ -594,13 +707,101 @@ function bindCanvas(stage) {
   });
 }
 
+function beginSectionExport() {
+  state.mode = "export-section";
+  state.sectionExportRect = null;
+  state.sectionExportItems = [];
+  state.showSectionConfirm = false;
+  toast("Draw a rectangle around the section to export. Press Esc to cancel.");
+  render();
+}
+
+function startSectionExportDraw(stage, event, point) {
+  clearSelection();
+  const start = point;
+  const marquee = document.createElement("div");
+  marquee.className = "selection-marquee";
+  document.getElementById("canvasWorld").appendChild(marquee);
+  try { stage.setPointerCapture(event.pointerId); } catch {}
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up, { once: true });
+  function move(moveEvent) {
+    const current = eventPoint(moveEvent, stage);
+    const rect = normalizeRect(start, current);
+    state.sectionExportRect = rect;
+    Object.assign(marquee.style, {
+      left: `${rect.x}px`,
+      top: `${rect.y}px`,
+      width: `${rect.w}px`,
+      height: `${rect.h}px`
+    });
+  }
+  function up(upEvent) {
+    document.removeEventListener("pointermove", move);
+    marquee.remove();
+    const end = eventPoint(upEvent, stage);
+    const rect = normalizeRect(start, end);
+    if (rect.w < 12 || rect.h < 12) {
+      toast("Draw a larger section rectangle.");
+      return;
+    }
+    state.sectionExportRect = rect;
+    state.sectionExportItems = sectionItems(rect);
+    state.showSectionConfirm = true;
+    render();
+  }
+}
+
+function normalizeRect(a, b) {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) };
+}
+
+function sectionItems(rect) {
+  const objectIds = new Set(state.objects.filter(obj => !obj.hidden && boxesIntersect(obj, rect)).map(obj => obj.id));
+  const connectors = state.connectors.filter(conn => {
+    if (conn.hidden) return false;
+    const ep = connectorEndpoints(conn);
+    return pointInRect({ x: ep.x1, y: ep.y1 }, rect) || pointInRect({ x: ep.x2, y: ep.y2 }, rect) || (conn.fromId && objectIds.has(conn.fromId)) || (conn.toId && objectIds.has(conn.toId));
+  });
+  const drawings = state.drawings.filter(drawing => !drawing.hidden && drawing.points.some(point => pointInRect(point, rect)));
+  return {
+    objects: state.objects.filter(obj => objectIds.has(obj.id)),
+    connectors,
+    drawings
+  };
+}
+
+function pointInRect(point, rect) {
+  return point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h;
+}
+
+function sectionExportModal() {
+  if (!state.showSectionConfirm) return "";
+  const count = state.sectionExportItems.objects.length + state.sectionExportItems.connectors.length + state.sectionExportItems.drawings.length;
+  return `
+    <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="sectionExportTitle">
+      <div class="modal">
+        <p class="eyebrow">Section Export</p>
+        <h2 id="sectionExportTitle">Export this selected section?</h2>
+        <p class="supporting">ForgeSpace found ${count} item${count === 1 ? "" : "s"} inside the rectangle. Export this section to a Word document?</p>
+        <div class="modal-actions">
+          <button class="secondary" id="redoSectionExport">No, reselect</button>
+          <button class="primary" id="confirmSectionExport">Yes, export Word</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function createObjectForMode(mode, x, y) {
   const shapeSpec = shapeSpecFor(state.shapeVariant);
   const makers = {
     sticky: () => sticky("New idea", x - 85, y - 60, "yellow"),
     shape: () => shape(shapeSpec.text, x - shapeSpec.w / 2, y - shapeSpec.h / 2, shapeSpec.w, shapeSpec.h, "purple", shapeSpec.variant),
     text: () => ({ type: "text", text: "Section title", x: x - 130, y: y - 28, w: 260, h: 64, color: "black" }),
-    comment: () => comment("Comment", x - 125, y - 50)
+    comment: () => comment("Comment", x - 125, y - 50),
+    frame: () => frame("New Frame", x - 260, y - 170)
   };
   return makers[mode]();
 }
@@ -750,7 +951,7 @@ function renderConnectorPlane(layer, plane) {
     ...state.drawings.map((item, index) => ({ type: "drawing", item, index })),
     ...state.connectors.map((item, index) => ({ type: "connector", item, index }))
   ]
-    .filter(record => (record.item.plane || "under") === plane)
+    .filter(record => !record.item.hidden && (record.item.plane || "under") === plane)
     .sort((a, b) => svgZ(a) - svgZ(b));
   const markup = items.map(record => record.type === "drawing" ? drawingMarkup(record.item) : connectorMarkup(record.item)).join("");
   layer.innerHTML = `
@@ -769,9 +970,11 @@ function renderConnectorPlane(layer, plane) {
 function drawingMarkup(drawing) {
   const points = drawing.points.map(point => `${point.x},${point.y}`).join(" ");
   const selected = isItemSelected("drawing", drawing.id);
+  const handles = selected ? drawingEndpointHandles(drawing) : "";
   return `
     <polyline class="drawing-line ${selected ? "selected-line" : ""}" points="${points}" fill="none" stroke="${drawing.color}" stroke-width="${drawing.width}" stroke-linecap="round" stroke-linejoin="round" />
-    <polyline class="drawing-hit" data-id="${drawing.id}" points="${points}" fill="none" stroke="transparent" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />`;
+    <polyline class="drawing-hit" data-id="${drawing.id}" points="${points}" fill="none" stroke="transparent" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+    ${handles}`;
 }
 
 function connectorMarkup(conn) {
@@ -848,10 +1051,19 @@ function connectorEndpointHandles(conn) {
     <circle class="connector-end" data-id="${conn.id}" data-end="end" cx="${ep.x2}" cy="${ep.y2}" r="8" />`;
 }
 
+function drawingEndpointHandles(drawing) {
+  if (!drawing.points.length) return "";
+  const first = drawing.points[0];
+  const last = drawing.points[drawing.points.length - 1];
+  return `
+    <circle class="drawing-end" data-id="${drawing.id}" cx="${first.x}" cy="${first.y}" r="7" />
+    <circle class="drawing-end" data-id="${drawing.id}" cx="${last.x}" cy="${last.y}" r="7" />`;
+}
+
 function renderObjects() {
   const layer = document.getElementById("objectLayer");
   if (!layer) return;
-  layer.innerHTML = state.objects.map(objectMarkup).join("");
+  layer.innerHTML = state.objects.filter(obj => !obj.hidden).map(objectMarkup).join("");
   layer.querySelectorAll(".board-object").forEach(el => bindObject(el));
 }
 
@@ -912,10 +1124,12 @@ function objectMarkup(obj) {
     obj.type === "text" ? "text-object" : obj.type,
     obj.color || "",
     obj.variant || "",
+    state.reviewMode ? "reviewing" : "",
     obj.locked ? "locked" : "",
     isObjectSelected(obj.id) ? "selected" : ""
   ].join(" ");
-  const voteBadge = obj.votes ? `<span class="badge" style="position:absolute;right:6px;bottom:6px;background:#111;color:#fff;">${obj.votes} votes</span>` : "";
+  const voteBadge = voteBadgeMarkup(obj);
+  const statusBadge = obj.status && obj.status !== "draft" ? `<span class="status-badge ${escapeAttr(obj.status)}">${statusLabel(obj.status)}</span>` : "";
   const resize = isObjectSelected(obj.id) && state.selectedIds.length <= 1 ? `<span class="resize-handle" title="Resize"></span>` : "";
   const ports = ["top", "right", "bottom", "left"].map(port => `<span class="connector-port ${port}" data-port="${port}" title="Connector point"></span>`).join("");
   const locked = obj.locked ? `<span class="lock-badge">Locked</span>` : "";
@@ -923,10 +1137,18 @@ function objectMarkup(obj) {
     <div class="${classes}" data-id="${obj.id}" style="left:${obj.x}px;top:${obj.y}px;width:${obj.w}px;height:${obj.h}px;">
       <div class="object-text">${escapeHtml(obj.text)}</div>
       ${voteBadge}
+      ${statusBadge}
       ${locked}
       ${ports}
       ${resize}
     </div>`;
+}
+
+function voteBadgeMarkup(obj) {
+  const up = Number(obj.upVotes || obj.votes || 0);
+  const down = Number(obj.downVotes || 0);
+  if (!up && !down) return "";
+  return `<span class="vote-badge"><span>+${up}</span><span>-${down}</span></span>`;
 }
 
 function bindObject(el) {
@@ -937,6 +1159,12 @@ function bindObject(el) {
     if (!obj) return;
     const stage = document.getElementById("canvasStage");
     const point = eventPoint(event, stage);
+    if (state.reviewMode) {
+      selectObject(id, false);
+      state.panel = "inspect";
+      render();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && state.mode === "select") {
       toggleObjectSelection(id);
       return;
@@ -948,7 +1176,7 @@ function bindObject(el) {
       if (conn && state.selectedType === "connector") conn.fromPort = event.target.dataset.port;
       return;
     }
-    if (["sticky", "shape", "text", "comment"].includes(state.mode)) {
+    if (["sticky", "shape", "text", "comment", "frame"].includes(state.mode)) {
       const created = createObjectForMode(state.mode, point.x, point.y);
       addObject(created, false, false);
       openEditor(created.id, event.clientX, event.clientY);
@@ -964,15 +1192,17 @@ function bindObject(el) {
       return;
     }
     if (!isObjectSelected(id)) selectObject(id, false);
-    if (state.voting && ["sticky", "shape"].includes(obj.type)) {
+    if (state.voteMode && ["sticky", "shape", "comment", "frame"].includes(obj.type)) {
       if (!canModifyItem(obj)) {
         toast("Guests can only vote on items they created in this MVP.");
         render();
         return;
       }
-      obj.votes = (obj.votes || 0) + 1;
+      if (state.voteMode === "up") obj.upVotes = (obj.upVotes || obj.votes || 0) + 1;
+      if (state.voteMode === "down") obj.downVotes = (obj.downVotes || 0) + 1;
+      if (obj.votes) delete obj.votes;
       saveLocalBoard(false);
-      toast("Vote added.");
+      toast(state.voteMode === "up" ? "Thumbs up vote added." : "Thumbs down vote added.");
       render();
       return;
     }
@@ -1213,6 +1443,26 @@ function openEditor(id, clientX, clientY) {
 function renderPanel() {
   const panel = document.getElementById("panelContent");
   if (!panel) return;
+  if (state.panel === "inspect") {
+    panel.innerHTML = inspectPanel();
+    bindPanelControls();
+    return;
+  }
+  if (state.panel === "layers") {
+    panel.innerHTML = layersPanel();
+    bindPanelControls();
+    return;
+  }
+  if (state.panel === "library") {
+    panel.innerHTML = libraryPanel();
+    bindPanelControls();
+    return;
+  }
+  if (state.panel === "hotkeys") {
+    panel.innerHTML = hotkeysPanel();
+    bindPanelControls();
+    return;
+  }
   if (state.panel === "ai") {
     panel.innerHTML = `
       <div class="panel-card">
@@ -1227,19 +1477,7 @@ function renderPanel() {
         <h3>Facilitation Summary</h3>
         <p>The board shows alignment around workshop structure, dependency visibility, and action ownership.</p>
       </div>`;
-    return;
-  }
-  if (state.panel === "export") {
-    panel.innerHTML = `
-      <div class="panel-card">
-        <h3>Export Options</h3>
-        <p>AFS users can import a board from JSON. AFS users and guests can export the current board as JSON, PNG, PDF, or HTML.</p>
-        <div class="stat-row"><span>Import</span><span class="badge">JSON board</span></div>
-        <div class="stat-row"><span>JSON</span><span class="badge">Board data</span></div>
-        <div class="stat-row"><span>PNG</span><span class="badge">Image snapshot</span></div>
-        <div class="stat-row"><span>PDF</span><span class="badge">One-page artifact</span></div>
-        <div class="stat-row"><span>HTML</span><span class="badge">Portable demo</span></div>
-      </div>`;
+    bindPanelControls();
     return;
   }
   const selected = selectedItem();
@@ -1250,11 +1488,17 @@ function renderPanel() {
       <div class="stat-row"><span>Objects</span><strong>${state.objects.length}</strong></div>
       <div class="stat-row"><span>Lines</span><strong>${state.connectors.length + state.drawings.length}</strong></div>
       <div class="stat-row"><span>Timer</span><strong>${formatTimer(state.timer.remaining)}</strong></div>
-      <div class="stat-row"><span>Voting</span><strong>${state.voting ? "Open" : "Closed"}</strong></div>
+      <div class="stat-row"><span>Vote Mode</span><strong>${state.voteMode ? statusVoteLabel(state.voteMode) : "Closed"}</strong></div>
     </div>
     <div class="panel-card">
       <h3>Usable Tools</h3>
-      <p class="small">Sticky, Shape, Text, and Comment place items where you click and stay active. Line, Arrow, and Pen draw when you drag and stay active. Double-click an object to edit it. Drag a selected corner to resize.</p>
+      <p class="small">Sticky, Shape, Text, Comment, and Frame place items where you click. Lines, arrows, and pen draw when you drag. Arrange actions live in the compact toolbar menu.</p>
+    </div>
+    <div class="panel-card">
+      <h3>Canvas Controls</h3>
+      <label class="check-row"><input type="checkbox" id="snapToggle" ${state.snapToGrid ? "checked" : ""} /> Snap to grid</label>
+      <label class="check-row"><input type="checkbox" id="reviewToggle" ${state.reviewMode ? "checked" : ""} /> Review mode <button class="info-dot" id="reviewInfo" title="What is Review mode?">i</button></label>
+      <div class="info-popover" id="reviewInfoText" hidden>Review Mode keeps the canvas in an inspection-first state for stakeholder walkthroughs. Users can select items, read specs and notes, and avoid accidental edits while reviewing readiness for build or follow-up.</div>
     </div>
     <div class="panel-card">
       <h3>Selected Item</h3>
@@ -1273,6 +1517,128 @@ function renderPanel() {
           <span class="badge">${role}</span>
         </div>`).join("")}
     </div>`;
+  bindPanelControls();
+}
+
+function inspectPanel() {
+  const selected = selectedItem();
+  return `
+    <div class="panel-card">
+      <h3>Inspector</h3>
+      ${selected ? inspectorFields(selected) : `<p class="small">Select an item to inspect specs, review status, notes, ownership, and handoff details.</p>`}
+    </div>
+    <div class="panel-card">
+      <h3>Review Readiness</h3>
+      <div class="stat-row"><span>Draft</span><strong>${countObjectsByStatus("draft")}</strong></div>
+      <div class="stat-row"><span>Review</span><strong>${countObjectsByStatus("review")}</strong></div>
+      <div class="stat-row"><span>Build</span><strong>${countObjectsByStatus("build")}</strong></div>
+      <div class="stat-row"><span>Blocked</span><strong>${countObjectsByStatus("blocked")}</strong></div>
+    </div>`;
+}
+
+function inspectorFields(item) {
+  if (selectedItems().length > 1) {
+    return `
+      <p>${selectedItems().length} items selected</p>
+      <div class="panel-actions">
+        <button class="secondary" data-panel-action="group">Group</button>
+        <button class="secondary" data-panel-action="lock">Lock / Unlock</button>
+        <button class="secondary" data-panel-action="block">Save Block</button>
+      </div>`;
+  }
+  const type = state.selectedType;
+  if (type !== "object") return selectedPanel(item);
+  return `
+    <label class="field compact-field"><span>Name</span><input data-prop="text" value="${escapeAttr(item.text || "")}" /></label>
+    <div class="field-grid">
+      <label class="field compact-field"><span>X</span><input data-prop="x" type="number" value="${Math.round(item.x)}" /></label>
+      <label class="field compact-field"><span>Y</span><input data-prop="y" type="number" value="${Math.round(item.y)}" /></label>
+      <label class="field compact-field"><span>W</span><input data-prop="w" type="number" value="${Math.round(item.w)}" /></label>
+      <label class="field compact-field"><span>H</span><input data-prop="h" type="number" value="${Math.round(item.h)}" /></label>
+    </div>
+    <label class="field compact-field"><span>Color</span><select data-prop="color">${colorOptions(item.color)}</select></label>
+    <label class="field compact-field"><span>Status</span><select data-prop="status">${statusOptions(item.status)}</select></label>
+    <label class="field compact-field"><span>Owner</span><input data-prop="owner" value="${escapeAttr(item.owner || "")}" placeholder="Owner or team" /></label>
+    <label class="field compact-field"><span>Notes</span><textarea data-prop="notes" rows="4" placeholder="Decision notes, risks, handoff context">${escapeHtml(item.notes || "")}</textarea></label>
+    <div class="panel-actions">
+      <button class="secondary" data-panel-action="duplicate">Duplicate</button>
+      <button class="secondary" data-panel-action="block">Save Block</button>
+      <button class="secondary" data-panel-action="lock">${item.locked ? "Unlock" : "Lock"}</button>
+    </div>`;
+}
+
+function layersPanel() {
+  const query = state.layerQuery.trim().toLowerCase();
+  const records = allBoardItemRecords()
+    .filter(record => !query || layerName(record).toLowerCase().includes(query))
+    .reverse();
+  return `
+    <div class="panel-card">
+      <h3>Layers</h3>
+      <label class="field compact-field"><span>Search</span><input id="layerSearch" value="${escapeAttr(state.layerQuery)}" placeholder="Find objects, comments, frames" /></label>
+      <div class="layer-list">
+        ${records.length ? records.map(layerRow).join("") : `<p class="small">No matching layers.</p>`}
+      </div>
+    </div>`;
+}
+
+function layerRow(record) {
+  const selected = isItemSelected(record.type, record.id);
+  return `
+    <div class="layer-row ${selected ? "active" : ""}" data-select-type="${record.type}" data-select-id="${record.id}">
+      <button class="layer-icon" data-layer-action="visibility" data-type="${record.type}" data-id="${record.id}" title="${record.item.hidden ? "Show" : "Hide"}">${record.item.hidden ? "H" : "V"}</button>
+      <button class="layer-icon" data-layer-action="lock" data-type="${record.type}" data-id="${record.id}" title="${record.item.locked ? "Unlock" : "Lock"}">${record.item.locked ? "L" : "U"}</button>
+      <span class="layer-name"><strong>${escapeHtml(layerType(record))}</strong>${escapeHtml(layerName(record))}</span>
+      ${record.item.status ? `<span class="mini-status ${escapeAttr(record.item.status)}">${statusLabel(record.item.status)}</span>` : ""}
+      <span class="layer-move">
+        <button data-layer-action="up" data-type="${record.type}" data-id="${record.id}" title="Move forward">Up</button>
+        <button data-layer-action="down" data-type="${record.type}" data-id="${record.id}" title="Move backward">Down</button>
+      </span>
+    </div>`;
+}
+
+function libraryPanel() {
+  const blocks = [...builtinBlocks(), ...state.customBlocks];
+  return `
+    <div class="panel-card">
+      <h3>Reusable Blocks</h3>
+      <p class="small">Insert common architecture and workflow primitives, or save selected objects as a reusable block.</p>
+      <div class="panel-actions">
+        <button class="primary small-primary" data-panel-action="block" ${selectedItemRecords().some(record => record.type === "object") ? "" : "disabled"}>Save Selection</button>
+      </div>
+      <div class="block-list">
+        ${blocks.map(block => `
+          <button class="block-button" data-block-id="${escapeAttr(block.id)}">
+            <strong>${escapeHtml(block.name)}</strong>
+            <span>${escapeHtml(block.description)}</span>
+          </button>`).join("")}
+      </div>
+    </div>`;
+}
+
+function hotkeysPanel() {
+  return `
+    <div class="panel-card">
+      <h3>HotKeys</h3>
+      ${[
+        ["Ctrl+A", "Select all canvas objects"],
+        ["Ctrl+Y", "Activate thumbs up voting"],
+        ["Ctrl+D", "Activate thumbs down voting"],
+        ["Ctrl+C", "Copy selected item"],
+        ["Ctrl+V", "Paste copied item"],
+        ["Ctrl+X", "Cut selected item"],
+        ["Ctrl+Z", "Undo last canvas change"],
+        ["Ctrl+G", "Group selected items"],
+        ["Ctrl+U", "Ungroup selected items"],
+        ["Ctrl+L", "Lock or unlock selected items"],
+        ["Ctrl+E", "Pen mode"],
+        ["Ctrl+S", "Show export reminder"],
+        ["Ctrl+]", "Move selected item forward"],
+        ["Ctrl+[", "Move selected item backward"],
+        ["Delete", "Delete selected item"],
+        ["Esc", "Cancel section export, clear selection, return to Select"]
+      ].map(([key, action]) => `<div class="hotkey-row"><strong>${key}</strong><span>${action}</span></div>`).join("")}
+    </div>`;
 }
 
 function selectedPanel(item) {
@@ -1280,12 +1646,294 @@ function selectedPanel(item) {
     return `<p>${selectedItems().length} items selected</p><p class="small">Ctrl+G groups them. Ctrl+L locks or unlocks them. Forward and Backward adjust stacking inside each item type. Drag any selected item to move the selected set.</p>`;
   }
   if (state.selectedType === "object") {
-    return `<p>${escapeHtml(item.text)}</p><p class="small">${Math.round(item.w)} x ${Math.round(item.h)} px. ${item.locked ? "Locked. Ctrl+L unlocks." : "Ctrl+L locks."} Double-click to edit. Ctrl+D duplicates. Ctrl+C/V copies and pastes. Ctrl+G groups overlapping objects. Delete removes.</p>`;
+    return `<p>${escapeHtml(item.text)}</p><p class="small">${Math.round(item.w)} x ${Math.round(item.h)} px. ${item.locked ? "Locked. Ctrl+L unlocks." : "Ctrl+L locks."} Double-click to edit. Use Arrange to duplicate. Ctrl+C/V copies and pastes. Ctrl+G groups overlapping objects. Delete removes.</p>`;
   }
   if (state.selectedType === "connector") {
     return `<p>${item.kind === "arrow" ? "Arrow" : "Line"}</p><p class="small">${item.locked ? "Locked. Ctrl+L unlocks." : "Ctrl+L locks."} Drag an endpoint handle to adjust or reconnect it.</p>`;
   }
   return `<p>Freehand drawing</p><p class="small">${item.locked ? "Locked. Ctrl+L unlocks." : "Ctrl+L locks."} Delete removes the selected drawing.</p>`;
+}
+
+function bindPanelControls() {
+  document.getElementById("snapToggle")?.addEventListener("change", event => {
+    state.snapToGrid = event.target.checked;
+    toast(state.snapToGrid ? "Snap to grid on." : "Snap to grid off.");
+  });
+  document.getElementById("reviewToggle")?.addEventListener("change", event => {
+    state.reviewMode = event.target.checked;
+    render();
+  });
+  document.getElementById("reviewInfo")?.addEventListener("click", event => {
+    event.preventDefault();
+    const info = document.getElementById("reviewInfoText");
+    if (info) info.hidden = !info.hidden;
+  });
+  document.getElementById("layerSearch")?.addEventListener("input", event => {
+    state.layerQuery = event.target.value;
+    renderPanel();
+  });
+  document.querySelectorAll("[data-prop]").forEach(control => {
+    control.addEventListener("change", updateSelectedProperty);
+  });
+  document.querySelectorAll("[data-panel-action]").forEach(button => {
+    button.addEventListener("click", () => handleArrangeAction(button.dataset.panelAction));
+  });
+  document.querySelectorAll("[data-select-type]").forEach(row => {
+    row.addEventListener("click", () => {
+      selectItem(row.dataset.selectType, row.dataset.selectId, false);
+      state.panel = "inspect";
+      render();
+    });
+  });
+  document.querySelectorAll("[data-layer-action]").forEach(button => {
+    button.addEventListener("click", event => {
+      event.stopPropagation();
+      toggleLayerState(button.dataset.type, button.dataset.id, button.dataset.layerAction);
+    });
+  });
+  document.querySelectorAll("[data-block-id]").forEach(button => {
+    button.addEventListener("click", () => insertBlock(button.dataset.blockId));
+  });
+}
+
+function updateSelectedProperty(event) {
+  const item = selectedItem();
+  if (!item || state.selectedType !== "object") return;
+  if (!canModifyItem(item)) {
+    toast("Guests can only edit items they created.");
+    renderPanel();
+    return;
+  }
+  const prop = event.target.dataset.prop;
+  let value = event.target.value;
+  if (["x", "y", "w", "h"].includes(prop)) {
+    value = Number(value);
+    if (!Number.isFinite(value)) return;
+    if (prop === "w") value = Math.max(80, value);
+    if (prop === "h") value = Math.max(52, value);
+  }
+  item[prop] = value;
+  saveLocalBoard(false);
+  render();
+}
+
+function handleArrangeAction(action) {
+  if (!action) return;
+  if (action === "duplicate") return duplicateSelected();
+  if (action === "group") return groupSelected();
+  if (action === "ungroup") return ungroupSelected();
+  if (action === "lock") return toggleLockSelected();
+  if (action === "block") return createReusableBlock();
+  if (action.startsWith("align-")) return alignSelected(action.replace("align-", ""));
+  if (action.startsWith("distribute-")) return distributeSelected(action.replace("distribute-", ""));
+  return moveSelectedLayer(action);
+}
+
+function alignSelected(axis) {
+  const records = selectedItemRecords().filter(record => record.type === "object" && canModifyItem(record.item) && !record.item.locked);
+  if (records.length < 2) {
+    toast("Select at least two editable objects to align.");
+    return;
+  }
+  const boxes = records.map(record => record.item);
+  const left = Math.min(...boxes.map(item => item.x));
+  const right = Math.max(...boxes.map(item => item.x + item.w));
+  const top = Math.min(...boxes.map(item => item.y));
+  const bottom = Math.max(...boxes.map(item => item.y + item.h));
+  boxes.forEach(item => {
+    if (axis === "left") item.x = left;
+    if (axis === "center") item.x = left + (right - left) / 2 - item.w / 2;
+    if (axis === "right") item.x = right - item.w;
+    if (axis === "top") item.y = top;
+    if (axis === "middle") item.y = top + (bottom - top) / 2 - item.h / 2;
+    if (axis === "bottom") item.y = bottom - item.h;
+  });
+  saveLocalBoard(false);
+  toast("Aligned selection.");
+  render();
+}
+
+function distributeSelected(axis) {
+  const records = selectedItemRecords().filter(record => record.type === "object" && canModifyItem(record.item) && !record.item.locked);
+  if (records.length < 3) {
+    toast("Select at least three editable objects to distribute.");
+    return;
+  }
+  const items = records.map(record => record.item).sort((a, b) => axis === "x" ? a.x - b.x : a.y - b.y);
+  const first = items[0];
+  const last = items[items.length - 1];
+  const start = axis === "x" ? first.x : first.y;
+  const end = axis === "x" ? last.x : last.y;
+  const gap = (end - start) / (items.length - 1);
+  items.forEach((item, index) => {
+    if (axis === "x") item.x = start + gap * index;
+    else item.y = start + gap * index;
+  });
+  saveLocalBoard(false);
+  toast("Distributed selection.");
+  render();
+}
+
+function toggleLayerState(type, id, action) {
+  const item = findItem(type, id);
+  if (!item) return;
+  if (!canModifyItem(item)) {
+    toast("Guests can only edit items they created.");
+    return;
+  }
+  if (action === "up") {
+    selectItem(type, id, false);
+    moveSelectedLayer("forward");
+    return;
+  }
+  if (action === "down") {
+    selectItem(type, id, false);
+    moveSelectedLayer("backward");
+    return;
+  }
+  if (action === "visibility") item.hidden = !item.hidden;
+  if (action === "lock") item.locked = !item.locked;
+  saveLocalBoard(false);
+  render();
+}
+
+function colorOptions(selected) {
+  return ["yellow", "blue", "green", "pink", "purple", "gray", "white", "black"]
+    .map(value => `<option value="${value}" ${selected === value ? "selected" : ""}>${titleCase(value)}</option>`)
+    .join("");
+}
+
+function statusOptions(selected = "draft") {
+  return ["draft", "review", "build", "blocked"]
+    .map(value => `<option value="${value}" ${(selected || "draft") === value ? "selected" : ""}>${statusLabel(value)}</option>`)
+    .join("");
+}
+
+function statusLabel(value) {
+  return {
+    draft: "Draft",
+    review: "Ready for Review",
+    build: "Ready for Build",
+    blocked: "Blocked"
+  }[value] || titleCase(value || "draft");
+}
+
+function statusVoteLabel(value) {
+  return value === "up" ? "Thumbs Up" : value === "down" ? "Thumbs Down" : "Closed";
+}
+
+function countObjectsByStatus(status) {
+  return state.objects.filter(item => (item.status || "draft") === status).length;
+}
+
+function layerType(record) {
+  return {
+    object: record.item.type === "frame" ? "Frame" : titleCase(record.item.type || "Object"),
+    connector: record.item.kind === "arrow" ? "Arrow" : "Line",
+    drawing: "Drawing"
+  }[record.type] || "Item";
+}
+
+function layerName(record) {
+  if (record.type === "object") return record.item.text || "Untitled";
+  if (record.type === "connector") return record.item.label || layerType(record);
+  return "Freehand drawing";
+}
+
+function builtinBlocks() {
+  return [
+    {
+      id: "block-api-service",
+      name: "API Service",
+      description: "Service box with dependency and implementation notes.",
+      objects: [
+        shape("API Service", 0, 0, 230, 96, "purple"),
+        sticky("Contract, auth, SLA", 24, 126, "blue")
+      ]
+    },
+    {
+      id: "block-decision-gate",
+      name: "Decision Gate",
+      description: "Diamond decision with risk callout.",
+      objects: [
+        shape("Decision", 32, 0, 140, 140, "green", "diamond"),
+        comment("Document decision owner.", 0, 172)
+      ]
+    },
+    {
+      id: "block-review-frame",
+      name: "Review Frame",
+      description: "Handoff-ready frame for demos or walkthroughs.",
+      objects: [
+        frame("Review Frame", 0, 0, 620, 380),
+        sticky("Open questions", 34, 86, "yellow"),
+        sticky("Build notes", 244, 86, "green")
+      ]
+    }
+  ];
+}
+
+function createReusableBlock() {
+  const records = selectedItemRecords().filter(record => record.type === "object" && canModifyItem(record.item));
+  if (!records.length) {
+    toast("Select editable objects to save a reusable block.");
+    return;
+  }
+  const bounds = objectBounds(records.map(record => record.item));
+  const name = records.length === 1 ? records[0].item.text || "Reusable Block" : `${records.length} item block`;
+  state.customBlocks.push({
+    id: `custom-${uid()}`,
+    name,
+    description: "Saved from this board.",
+    objects: records.map(record => {
+      const copy = JSON.parse(JSON.stringify(record.item));
+      copy.x -= bounds.x;
+      copy.y -= bounds.y;
+      delete copy.id;
+      delete copy.ownerId;
+      delete copy.groupId;
+      return copy;
+    })
+  });
+  saveLocalBoard(false);
+  state.panel = "library";
+  toast("Reusable block saved.");
+  render();
+}
+
+function insertBlock(blockId) {
+  const block = [...builtinBlocks(), ...state.customBlocks].find(item => item.id === blockId);
+  if (!block) return;
+  const stage = document.getElementById("canvasStage");
+  const rect = stage.getBoundingClientRect();
+  const center = screenToWorld(rect.width / 2, rect.height / 2);
+  const bounds = objectBounds(block.objects);
+  const groupId = `group-${uid()}`;
+  const added = block.objects.map(source => {
+    const item = JSON.parse(JSON.stringify(source));
+    item.id = uid();
+    item.ownerId = state.sessionId;
+    item.groupId = groupId;
+    item.x = center.x - bounds.w / 2 + item.x;
+    item.y = center.y - bounds.h / 2 + item.y;
+    return item;
+  });
+  state.objects.push(...added);
+  state.selectedItems = added.map(item => itemKey("object", item.id));
+  state.selectedId = added[added.length - 1]?.id || null;
+  state.selectedType = "object";
+  state.selectedIds = selectedObjectIds();
+  saveLocalBoard(false);
+  toast(`${block.name} inserted.`);
+  render();
+}
+
+function objectBounds(objects) {
+  const x = Math.min(...objects.map(item => item.x));
+  const y = Math.min(...objects.map(item => item.y));
+  const right = Math.max(...objects.map(item => item.x + item.w));
+  const bottom = Math.max(...objects.map(item => item.y + item.h));
+  return { x, y, w: right - x, h: bottom - y };
 }
 
 function selectedItem() {
@@ -1424,8 +2072,8 @@ function applyMovementSnapshot(pos, dx, dy) {
   if (pos.type === "object") {
     const item = findItem(pos.type, pos.id);
     if (!item) return;
-    item.x = pos.x + dx;
-    item.y = pos.y + dy;
+    item.x = state.snapToGrid ? snapValue(pos.x + dx) : pos.x + dx;
+    item.y = state.snapToGrid ? snapValue(pos.y + dy) : pos.y + dy;
     const node = document.querySelector(`.board-object[data-id="${cssEscape(item.id)}"]`);
     if (node) {
       node.style.left = `${item.x}px`;
@@ -1436,14 +2084,17 @@ function applyMovementSnapshot(pos, dx, dy) {
   if (pos.type === "connector") {
     const item = findItem(pos.type, pos.id);
     if (!item) return;
-    item.x1 = pos.x1 + dx;
-    item.y1 = pos.y1 + dy;
-    item.x2 = pos.x2 + dx;
-    item.y2 = pos.y2 + dy;
+    item.x1 = state.snapToGrid ? snapValue(pos.x1 + dx) : pos.x1 + dx;
+    item.y1 = state.snapToGrid ? snapValue(pos.y1 + dy) : pos.y1 + dy;
+    item.x2 = state.snapToGrid ? snapValue(pos.x2 + dx) : pos.x2 + dx;
+    item.y2 = state.snapToGrid ? snapValue(pos.y2 + dy) : pos.y2 + dy;
     return;
   }
   const item = findItem(pos.type, pos.id);
-  if (item) item.points = pos.points.map(point => ({ x: point.x + dx, y: point.y + dy }));
+  if (item) item.points = pos.points.map(point => ({
+    x: state.snapToGrid ? snapValue(point.x + dx) : point.x + dx,
+    y: state.snapToGrid ? snapValue(point.y + dy) : point.y + dy
+  }));
 }
 
 function objectCenter(obj) {
@@ -1465,6 +2116,20 @@ function clearSelection() {
   state.selectedIds = [];
   state.selectedItems = [];
   state.selectedType = "object";
+}
+
+function selectAllCanvasItems() {
+  const keys = allBoardItemRecords()
+    .filter(record => !record.item.hidden)
+    .map(record => itemKey(record.type, record.id));
+  state.selectedItems = keys;
+  const last = keys.length ? parseItemKey(keys[keys.length - 1]) : null;
+  state.selectedType = last?.type || "object";
+  state.selectedId = last?.id || null;
+  state.selectedIds = selectedObjectIds();
+  state.panel = "inspect";
+  toast(`Selected ${keys.length} item${keys.length === 1 ? "" : "s"}.`);
+  render();
 }
 
 function duplicateSelected() {
@@ -1523,6 +2188,7 @@ function pasteClipboard() {
   }
   state.selectedId = item.id;
   state.selectedType = state.clipboard.type;
+  state.selectedItems = [itemKey(state.clipboard.type, item.id)];
   state.selectedIds = state.clipboard.type === "object" ? [item.id] : [];
   saveLocalBoard(false);
   render();
@@ -1720,9 +2386,17 @@ function bindKeyboard() {
   document.addEventListener("keydown", event => {
     if (event.target.matches("input, textarea")) return;
     if (event.key === "Delete" || event.key === "Backspace") deleteSelected();
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+      event.preventDefault();
+      selectAllCanvasItems();
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
       event.preventDefault();
-      duplicateSelected();
+      setVoteMode("down");
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      setVoteMode("up");
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "e") {
       event.preventDefault();
@@ -1770,6 +2444,9 @@ function bindKeyboard() {
       saveLocalBoard(true);
     }
     if (event.key === "Escape") {
+      document.querySelector(".selection-marquee")?.remove();
+      state.showSectionConfirm = false;
+      state.sectionExportRect = null;
       setMode("select");
       clearSelection();
       render();
@@ -1828,6 +2505,8 @@ function boardData() {
     objects: state.objects,
     connectors: state.connectors,
     drawings: state.drawings,
+    customBlocks: state.customBlocks,
+    snapToGrid: state.snapToGrid,
     nextId: state.nextId
   };
 }
@@ -1844,6 +2523,8 @@ function historyData() {
     objects: state.objects,
     connectors: state.connectors,
     drawings: state.drawings,
+    customBlocks: state.customBlocks,
+    snapToGrid: state.snapToGrid,
     nextId: state.nextId
   };
 }
@@ -1881,6 +2562,8 @@ function applyBoardData(data) {
   state.objects = Array.isArray(data.objects) ? data.objects : [];
   state.connectors = Array.isArray(data.connectors) ? data.connectors.map(conn => ({ kind: "arrow", ...conn })) : [];
   state.drawings = Array.isArray(data.drawings) ? data.drawings : [];
+  state.customBlocks = Array.isArray(data.customBlocks) ? data.customBlocks : [];
+  state.snapToGrid = typeof data.snapToGrid === "boolean" ? data.snapToGrid : state.snapToGrid;
   state.nextId = Math.max(Number(data.nextId) || state.nextId, maxExistingId() + 1);
   clearSelection();
 }
@@ -1943,6 +2626,215 @@ function exportPdf() {
   const pdf = createPdf();
   download(`${slug(state.boardTitle)}.pdf`, pdf, "application/pdf");
   toast("PDF export created.");
+}
+
+function exportWord(scope = null, suffix = "canvas") {
+  const data = normalizeExportScope(scope);
+  if (!data.objects.length && !data.connectors.length && !data.drawings.length) {
+    toast("No canvas items found for Word export.");
+    return;
+  }
+  const docx = createDocx(data);
+  download(`${slug(state.boardTitle)}-${suffix}.docx`, docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  toast("Word export created.");
+}
+
+function normalizeExportScope(scope) {
+  const source = scope || { objects: state.objects, connectors: state.connectors, drawings: state.drawings };
+  const objects = (source.objects || []).filter(item => !item.hidden);
+  const objectIds = new Set(objects.map(item => item.id));
+  const connectors = (source.connectors || []).filter(item => !item.hidden && (!item.fromId || objectIds.has(item.fromId)) && (!item.toId || objectIds.has(item.toId)));
+  const drawings = (source.drawings || []).filter(item => !item.hidden);
+  const boundsSource = [
+    ...objects.map(item => ({ x: item.x, y: item.y, w: item.w, h: item.h })),
+    ...connectors.map(conn => {
+      const ep = connectorEndpoints(conn);
+      return { x: Math.min(ep.x1, ep.x2), y: Math.min(ep.y1, ep.y2), w: Math.abs(ep.x1 - ep.x2), h: Math.abs(ep.y1 - ep.y2) };
+    }),
+    ...drawings.flatMap(drawing => drawing.points.map(point => ({ x: point.x, y: point.y, w: 1, h: 1 })))
+  ];
+  const bounds = boundsSource.length ? objectBounds(boundsSource) : { x: 0, y: 0, w: 1200, h: 800 };
+  return { objects, connectors, drawings, bounds };
+}
+
+function createDocx(data) {
+  const files = {
+    "[Content_Types].xml": contentTypesXml(),
+    "_rels/.rels": relsXml(),
+    "word/_rels/document.xml.rels": documentRelsXml(),
+    "word/document.xml": documentXml(data),
+    "word/styles.xml": stylesXml()
+  };
+  return createZip(files);
+}
+
+function contentTypesXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`;
+}
+
+function relsXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+}
+
+function documentRelsXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+}
+
+function stylesXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Segoe UI" w:hAnsi="Segoe UI"/><w:sz w:val="20"/></w:rPr></w:style></w:styles>`;
+}
+
+function documentXml(data) {
+  const widthPt = Math.max(720, pxToPt(data.bounds.w + 160));
+  const heightPt = Math.max(540, pxToPt(data.bounds.h + 180));
+  const body = [
+    titleParagraph(`${state.boardTitle} - ForgeSpace Export`),
+    ...data.objects.map(item => wordShape(item, data.bounds)),
+    ...data.connectors.map(item => wordLine(item, data.bounds)),
+    ...data.drawings.map(item => wordDrawing(item, data.bounds))
+  ].join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+    <w:body>
+      ${body}
+      <w:sectPr><w:pgSz w:w="${Math.round(widthPt * 20)}" w:h="${Math.round(heightPt * 20)}" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr>
+    </w:body>
+  </w:document>`;
+}
+
+function titleParagraph(text) {
+  return `<w:p><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>${xmlEscape(text)}</w:t></w:r></w:p>`;
+}
+
+function wordShape(obj, bounds) {
+  const x = pxToPt(obj.x - bounds.x + 72);
+  const y = pxToPt(obj.y - bounds.y + 96);
+  const w = pxToPt(obj.w);
+  const h = pxToPt(obj.h);
+  const fill = objectFill(obj).replace("#", "");
+  const stroke = obj.type === "comment" ? "a100ff" : "777782";
+  const shapeType = obj.variant === "oval" || obj.variant === "circle" ? "oval" : obj.variant === "diamond" ? "shape" : "roundrect";
+  const diamondPath = obj.variant === "diamond" ? ` path="m ${w / 2},0 l ${w},${h / 2} ${w / 2},${h} 0,${h / 2} x e"` : "";
+  return `<w:p><w:r><w:pict><v:${shapeType}${diamondPath} style="position:absolute;margin-left:${x}pt;margin-top:${y}pt;width:${w}pt;height:${h}pt;z-index:${state.objects.indexOf(obj) + 1}" fillcolor="#${fill}" strokecolor="#${stroke}"><v:textbox inset="6pt,4pt,6pt,4pt"><w:txbxContent><w:p><w:r><w:t>${xmlEscape(obj.text || "")}</w:t></w:r></w:p>${obj.notes ? `<w:p><w:r><w:rPr><w:i/></w:rPr><w:t>${xmlEscape(obj.notes)}</w:t></w:r></w:p>` : ""}</w:txbxContent></v:textbox></v:${shapeType}></w:pict></w:r></w:p>`;
+}
+
+function wordLine(conn, bounds) {
+  const ep = connectorEndpoints(conn);
+  const x1 = pxToPt(ep.x1 - bounds.x + 72);
+  const y1 = pxToPt(ep.y1 - bounds.y + 96);
+  const x2 = pxToPt(ep.x2 - bounds.x + 72);
+  const y2 = pxToPt(ep.y2 - bounds.y + 96);
+  const arrow = conn.kind === "arrow" ? ` o:connectortype="straight" endarrow="block"` : "";
+  return `<w:p><w:r><w:pict><v:line from="${x1}pt,${y1}pt" to="${x2}pt,${y2}pt" strokecolor="#6f6f78" strokeweight="2pt"${arrow}/></w:pict></w:r></w:p>`;
+}
+
+function wordDrawing(drawing, bounds) {
+  if (drawing.points.length < 2) return "";
+  const points = drawing.points.map(point => `${pxToPt(point.x - bounds.x + 72)},${pxToPt(point.y - bounds.y + 96)}`).join(" ");
+  return `<w:p><w:r><w:pict><v:polyline points="${points}" strokecolor="${drawing.color || "#111111"}" strokeweight="${drawing.width || 2}pt" filled="false"/></w:pict></w:r></w:p>`;
+}
+
+function pxToPt(value) {
+  return Math.round(value * 0.75 * 100) / 100;
+}
+
+function xmlEscape(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function createZip(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  Object.entries(files).forEach(([name, content]) => {
+    const nameBytes = encoder.encode(name);
+    const data = encoder.encode(content);
+    const crc = crc32(data);
+    const local = zipLocalHeader(nameBytes, data.length, crc);
+    localParts.push(local, nameBytes, data);
+    centralParts.push(zipCentralHeader(nameBytes, data.length, crc, offset));
+    offset += local.length + nameBytes.length + data.length;
+  });
+  const centralOffset = offset;
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = zipEndRecord(Object.keys(files).length, centralSize, centralOffset);
+  return new Blob([...localParts, ...centralParts, end], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+}
+
+function zipLocalHeader(nameBytes, size, crc) {
+  const header = new Uint8Array(30);
+  const view = new DataView(header.buffer);
+  view.setUint32(0, 0x04034b50, true);
+  view.setUint16(4, 20, true);
+  view.setUint16(10, dosTime(), true);
+  view.setUint16(12, dosDate(), true);
+  view.setUint32(14, crc, true);
+  view.setUint32(18, size, true);
+  view.setUint32(22, size, true);
+  view.setUint16(26, nameBytes.length, true);
+  return header;
+}
+
+function zipCentralHeader(nameBytes, size, crc, offset) {
+  const header = new Uint8Array(46 + nameBytes.length);
+  const view = new DataView(header.buffer);
+  view.setUint32(0, 0x02014b50, true);
+  view.setUint16(4, 20, true);
+  view.setUint16(6, 20, true);
+  view.setUint16(12, dosTime(), true);
+  view.setUint16(14, dosDate(), true);
+  view.setUint32(16, crc, true);
+  view.setUint32(20, size, true);
+  view.setUint32(24, size, true);
+  view.setUint16(28, nameBytes.length, true);
+  view.setUint32(42, offset, true);
+  header.set(nameBytes, 46);
+  return header;
+}
+
+function zipEndRecord(count, centralSize, centralOffset) {
+  const header = new Uint8Array(22);
+  const view = new DataView(header.buffer);
+  view.setUint32(0, 0x06054b50, true);
+  view.setUint16(8, count, true);
+  view.setUint16(10, count, true);
+  view.setUint32(12, centralSize, true);
+  view.setUint32(16, centralOffset, true);
+  return header;
+}
+
+function crc32(data) {
+  let crc = -1;
+  for (let i = 0; i < data.length; i += 1) {
+    crc = (crc >>> 8) ^ crcTable()[(crc ^ data[i]) & 0xff];
+  }
+  return (crc ^ -1) >>> 0;
+}
+
+function crcTable() {
+  if (window.forgeCrcTable) return window.forgeCrcTable;
+  window.forgeCrcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  return window.forgeCrcTable;
+}
+
+function dosTime() {
+  const now = new Date();
+  return (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+}
+
+function dosDate() {
+  const now = new Date();
+  return ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
 }
 
 function exportSvg() {
@@ -2168,6 +3060,10 @@ function cssEscape(value) {
 
 function distance(x1, y1, x2, y2) {
   return Math.hypot(x2 - x1, y2 - y1);
+}
+
+function snapValue(value, size = 16) {
+  return Math.round(value / size) * size;
 }
 
 function boxesIntersect(a, b) {
